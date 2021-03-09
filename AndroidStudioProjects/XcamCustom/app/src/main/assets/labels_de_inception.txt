@@ -1,0 +1,11 @@
+airplane
+buildings
+car
+flower
+forest
+glacier
+motorbike
+mountain
+person
+sea
+street
