@@ -293,7 +293,7 @@ private class LuminosityAnalyzer(private val listener: LumaListener) : ImageAnal
             val bm = mediaImage?.toBitmap()
             Log.d("MainActivity", "BITMAP: " + bm.toString())
 
-            val image = InputImage.fromBitmap(bm, 0)
+            val image = InputImage.fromMediaImage(mediaImage, 0)//InputImage.fromBitmap(bm, 0)
 
             labeler.process(image)
                 .addOnSuccessListener { labels ->
@@ -313,6 +313,7 @@ private class LuminosityAnalyzer(private val listener: LumaListener) : ImageAnal
                 .addOnFailureListener { e ->
                     // Task failed with an exception
                     Log.d("MainActivity", "aaya re message: " + e.localizedMessage)
+                    imageProxy.close()
                     // ...
                 }
 
@@ -357,10 +358,9 @@ private class LuminosityAnalyzer(private val listener: LumaListener) : ImageAnal
                 .addOnFailureListener { e ->
                     // Task failed with an exception
                     Log.d("MainActivity", "FAILURE: " + e.toString())
+                    imageProxy.close()           
                 }
-            mediaImage.close()
-            imageProxy.close()
         }
-        imageProxy.close()
+        //imageProxy.close()
     }
 }
