@@ -1,11 +1,13 @@
 apply plugin: 'com.android.application'
 apply plugin: 'kotlin-android'
 apply plugin: 'kotlin-android-extensions'
+apply plugin: 'com.chaquo.python'
 
 android {
     compileSdkVersion 30
     buildToolsVersion "30.0.2"
     apply plugin: 'kotlin-android-extensions'
+    useLibrary 'org.apache.http.legacy'
 
     aaptOptions {
         noCompress "tflite"
@@ -17,6 +19,22 @@ android {
         targetSdkVersion 30
         versionCode 1
         versionName "1.0"
+
+        sourceSets{
+            main{
+                python{
+                    srcDirs = ['src/main/python']
+                }
+            }
+        }
+
+        ndk {
+            abiFilters "armeabi-v7a", "x86"
+        }
+
+        python{
+            buildPython "C:/Users/mukan/AppData/Local/Programs/Python/Python39/python.exe"
+        }
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -35,6 +53,8 @@ android {
 }
 
 dependencies {
+
+    implementation 'androidx.palette:palette:1.0.0'
 
     implementation 'com.google.mlkit:face-detection:16.0.4'
 
