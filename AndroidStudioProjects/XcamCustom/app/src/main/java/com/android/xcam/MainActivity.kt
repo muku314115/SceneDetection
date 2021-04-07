@@ -1,26 +1,23 @@
 package com.android.xcam
-import androidx.appcompat.app.AppCompatActivity
-import android.os.Bundle
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.pm.PackageManager
 import android.graphics.*
-import android.graphics.drawable.BitmapDrawable
+import android.graphics.Camera
 import android.media.Image
-import android.media.ImageReader
 import android.net.Uri
+import android.os.Bundle
 import android.util.Log
-import android.widget.Button
 import android.widget.Toast
+import androidx.appcompat.app.AppCompatActivity
+import androidx.camera.core.*
+import androidx.camera.core.ImageCapture.Builder
+import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import java.util.concurrent.Executors
-import androidx.camera.core.*
-import androidx.camera.core.ImageCapture.*
-import androidx.camera.core.impl.PreviewConfig
-import androidx.camera.lifecycle.ProcessCameraProvider
-import androidx.lifecycle.LifecycleOwner
-import com.google.common.util.concurrent.ListenableFuture
+import androidx.palette.graphics.Palette
+import com.chaquo.python.Python
+import com.chaquo.python.android.AndroidPlatform
 import com.google.mlkit.common.model.LocalModel
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.face.FaceContour
@@ -28,7 +25,6 @@ import com.google.mlkit.vision.face.FaceDetection
 import com.google.mlkit.vision.face.FaceLandmark
 import com.google.mlkit.vision.label.ImageLabeling
 import com.google.mlkit.vision.label.custom.CustomImageLabelerOptions
-import com.google.mlkit.vision.label.defaults.ImageLabelerOptions
 import kotlinx.android.synthetic.main.activity_main.*
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -37,6 +33,8 @@ import java.nio.ByteBuffer
 import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
+
 typealias LumaListener = (luma: Double) -> Unit
 
 class MainActivity : AppCompatActivity() {
@@ -57,6 +55,25 @@ class MainActivity : AppCompatActivity() {
         .build()
 
     val labeler = ImageLabeling.getClient(customImageLabelerOptions)
+
+    fun InputImage.toBitmap(): Bitmap {
+        val yBuffer = planes[0].buffer // Y
+        val vuBuffer = planes[2].buffer // VU
+
+        val ySize = yBuffer.remaining()
+        val vuSize = vuBuffer.remaining()
+
+        val nv21 = ByteArray(ySize + vuSize)
+
+        yBuffer.get(nv21, 0, ySize)
+        vuBuffer.get(nv21, ySize, vuSize)
+
+        val yuvImage = YuvImage(nv21, ImageFormat.NV21, this.width, this.height, null)
+        val out = ByteArrayOutputStream()
+        yuvImage.compressToJpeg(Rect(0, 0, yuvImage.width, yuvImage.height), 50, out)
+        val imageBytes = out.toByteArray()
+        return BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
+    }
 
     override fun onRequestPermissionsResult(
             requestCode: Int, permissions: Array<String>, grantResults:
@@ -84,6 +101,12 @@ class MainActivity : AppCompatActivity() {
             ActivityCompat.requestPermissions(
                     this, REQUIRED_PERMISSIONS, REQUEST_CODE_PERMISSIONS)
         }
+
+        val cam: android.hardware.Camera = android.hardware.Camera.open()
+        val param = cam.parameters
+        val flat: String = param.flatten()
+
+        Log.d("MainActivity", "PARAMETERS: " + cam.parameters.flatten())
 
         // Set up the listener for take photo button
         camera_capture_button.setOnClickListener { takePhoto() }
@@ -117,12 +140,23 @@ class MainActivity : AppCompatActivity() {
             }
 
             override fun onImageSaved(output: ImageCapture.OutputFileResults) {
+                val bm: Bitmap
                 val savedUri = Uri.fromFile(photoFile)
                 val msg = "Photo capture succeeded: $savedUri"
                 val image: InputImage
                 try {
                     image = InputImage.fromFilePath(baseContext, savedUri)
-                    Log.d("MainActivity", "success man, " + image.height)
+                    bm = image.toBitmap()
+                    Log.d("MainActivity", "success man, " + savedUri.path)
+
+                    //THIS IS THE ADDITION OF PYTHON CODE, DELETE IT IF IT SCREWS THINGS UP
+                    if (!Python.isStarted()) {
+                        Python.start(AndroidPlatform(baseContext))
+                    }
+                    val python = Python.getInstance()
+                    val pythonFile = python.getModule("test_model")
+                    val modelo_testo = pythonFile.callAttr("__main__", "model = iphone_orig, test_subset=full")
+
                     val file = File(savedUri.path)
                     getApplicationContext().deleteFile(file.name)
 
@@ -149,11 +183,10 @@ class MainActivity : AppCompatActivity() {
                             // ...
                         }
 
-
+                    
                 } catch (e: IOException) {
                     e.printStackTrace()
                 }
-
             }
         })
     }
@@ -289,25 +322,25 @@ private class LuminosityAnalyzer(private val listener: LumaListener) : ImageAnal
 
         val mediaImage = imageProxy.image
 
+        val cam: android.hardware.Camera = android.hardware.Camera.open()
+        val param = cam.parameters
+        val flat: String = param.flatten()
+
+        Log.d("MainActivity", "PARAMETERS: " + cam.parameters.flatten())
+
+        //available ISO values for this device: 100, 150, 200, 400, 600, 800, 1200, 1600, 2400, 3200
+
         if (mediaImage != null) {
             val bm = mediaImage?.toBitmap()
             Log.d("MainActivity", "BITMAP: " + bm.toString())
 
-            val image = InputImage.fromMediaImage(mediaImage, 0)//InputImage.fromBitmap(bm, 0)
+            val image = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)//InputImage.fromBitmap(bm, 0)
 
-            labeler.process(image)
+            /*labeler.process(image)
                 .addOnSuccessListener { labels ->
                     var curcon=0.00
                     // Task completed successfully
-                    for (label in labels) {
-                        /*if(label.confidence > curcon){
-                            curcon = label.confidence.toDouble()
-                            textView.text = label.text
 
-                        }*/
-                        //textView.text = textView.text
-                        Log.d("MainActivity", "aaya re message: " + label.text + " confidence: " + label.confidence)
-                    }
                     // ...
                 }
                 .addOnFailureListener { e ->
@@ -315,7 +348,7 @@ private class LuminosityAnalyzer(private val listener: LumaListener) : ImageAnal
                     Log.d("MainActivity", "aaya re message: " + e.localizedMessage)
                     imageProxy.close()
                     // ...
-                }
+                }*/
 
             detector.process(image)
                 .addOnSuccessListener { faces ->
@@ -353,12 +386,13 @@ private class LuminosityAnalyzer(private val listener: LumaListener) : ImageAnal
                         }
                     }
                     Log.e("MainActivity", "Photo detected!")
+                    imageProxy.close()
 
                 }
                 .addOnFailureListener { e ->
                     // Task failed with an exception
                     Log.d("MainActivity", "FAILURE: " + e.toString())
-                    imageProxy.close()           
+                    imageProxy.close()
                 }
         }
         //imageProxy.close()
